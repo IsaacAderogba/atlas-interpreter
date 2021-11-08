@@ -1,3 +1,4 @@
+import fs from "fs";
 import { Environment, GlobalEnvironment } from "./Environment";
 import parser from "./parser/parser";
 import { Transformer } from "./transform/Transformer";
@@ -10,12 +11,12 @@ export class Atlas {
 
   run(code: string) {
     const exp = parser.parse(`(begin ${code})`);
-    return this.eval(exp);
+    return this.evalGlobal(exp);
   }
 
-  // evalGlobal(exp, env = this.global) {
-  //   return this._evalBody(exp, env);
-  // }
+  evalGlobal(exp, env = this.global) {
+    return this.evalBody(exp, env);
+  }
 
   eval(exp, env = this.global) {
     if (this.isNumber(exp)) {
@@ -37,8 +38,14 @@ export class Atlas {
     }
 
     if (exp[0] === "set") {
-      const [_, name, value] = exp;
-      return env.assign(name, this.eval(value, env));
+      const [_, ref, value] = exp;
+
+      if (ref[0] === "prop") {
+        const [_tag, instance, propName] = ref;
+        const instanceEnv = this.eval(instance, env);
+        return instanceEnv.define(propName, this.eval(value, env));
+      }
+      return env.assign(ref, this.eval(value, env));
     }
 
     if (this.isVariableName(exp)) {
@@ -83,6 +90,59 @@ export class Atlas {
       };
     }
 
+    if (exp[0] === "class") {
+      const [_tag, name, parent, body] = exp;
+      const parentEnv = this.eval(parent, env) || env;
+      const classEnv = new Environment({}, parentEnv);
+
+      this.evalBody(body, classEnv);
+      return env.define(name, classEnv);
+    }
+
+    if (exp[0] === "super") {
+      const [_tag, className] = exp;
+      return this.eval(className, env).parent;
+    }
+
+    if (exp[0] === "new") {
+      const classEnv = this.eval(exp[1], env);
+      const instanceEnv = new Environment({}, classEnv);
+
+      const args = exp.slice(2).map((arg) => this.eval(arg, env));
+      this.callUserDefinedFunction(classEnv.lookup("constructor"), [
+        instanceEnv, // self
+        ...args,
+      ]);
+
+      return instanceEnv;
+    }
+
+    if (exp[0] === "prop") {
+      const [_tag, instance, name] = exp;
+
+      const instanceEnv = this.eval(instance, env);
+      return instanceEnv.lookup(name);
+    }
+
+    if (exp[0] === "module") {
+      const [_tag, name, body] = exp;
+      const moduleEnv = new Environment({}, env);
+
+      this.evalBody(body, moduleEnv);
+
+      return env.define(name, moduleEnv);
+    }
+
+    if (exp[0] === "import") {
+      // need to import source code - can add a caching layer
+      const [_tag, name] = exp;
+      
+      const moduleSrc = fs.readFileSync(`${__dirname}/modules/${name}.eva`, "utf-8");
+      const body = parser.parse(`(begin ${moduleSrc})`);
+      const moduleExp = ["module", name, body];
+      return this.eval(moduleExp, env);
+    }
+
     if (Array.isArray(exp)) {
       const fn = this.eval(exp[0], env);
 
@@ -92,17 +152,22 @@ export class Atlas {
         return fn(...args);
       }
 
-      const activationRecord = {};
-      fn.params.forEach((param, index) => {
-        activationRecord[param] = args[index];
-      });
-
-      const activationEnv = new Environment(activationRecord, fn.env);
-
-      return this.evalBody(fn.body, activationEnv);
+      return this.callUserDefinedFunction(fn, args);
     }
 
     throw `Unimplemented ${JSON.stringify(exp)}`;
+  }
+
+  private callUserDefinedFunction(fn, args) {
+    // 2. User defined functions
+    const activationRecord = {};
+    fn.params.forEach((param, index) => {
+      activationRecord[param] = args[index];
+    });
+    // environment is captured environment
+    const activationEnv = new Environment(activationRecord, fn.env);
+
+    return this.evalBody(fn.body, activationEnv);
   }
 
   private evalBody(body, env: Environment) {
