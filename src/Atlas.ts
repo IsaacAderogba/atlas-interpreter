@@ -1,3 +1,4 @@
+import fs from "fs";
 import { Environment, GlobalEnvironment } from "./Environment";
 import parser from "./parser/parser";
 import { Transformer } from "./transform/Transformer";
@@ -121,6 +122,25 @@ export class Atlas {
 
       const instanceEnv = this.eval(instance, env);
       return instanceEnv.lookup(name);
+    }
+
+    if (exp[0] === "module") {
+      const [_tag, name, body] = exp;
+      const moduleEnv = new Environment({}, env);
+
+      this.evalBody(body, moduleEnv);
+
+      return env.define(name, moduleEnv);
+    }
+
+    if (exp[0] === "import") {
+      // need to import source code - can add a caching layer
+      const [_tag, name] = exp;
+      
+      const moduleSrc = fs.readFileSync(`${__dirname}/modules/${name}.eva`, "utf-8");
+      const body = parser.parse(`(begin ${moduleSrc})`);
+      const moduleExp = ["module", name, body];
+      return this.eval(moduleExp, env);
     }
 
     if (Array.isArray(exp)) {
