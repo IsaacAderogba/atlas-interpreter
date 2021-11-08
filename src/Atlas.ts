@@ -59,6 +59,18 @@ export class Atlas {
       return result;
     }
 
+    if (exp[0] === "def") {
+      const [_tag, name, params, body] = exp;
+
+      const fn = {
+        params,
+        body,
+        env
+      }
+
+      return env.define(name, fn);
+    }
+
     if (Array.isArray(exp)) {
       const fn = this.eval(exp[0], env);
 
@@ -67,9 +79,25 @@ export class Atlas {
       if (typeof fn === "function") {
         return fn(...args);
       }
+
+      const activationRecord = {};
+      fn.params.forEach((param, index) => {
+        activationRecord[param] = args[index];
+      })
+
+      const activationEnv = new Environment(activationRecord, fn.env);
+
+      return this.evalBody(fn.body, activationEnv)
     }
 
     throw `Unimplemented ${JSON.stringify(exp)}`;
+  }
+
+  private evalBody(body, env: Environment) {
+    if (body[0] === "begin") {
+      return this.evalBlock(body, env)
+    }
+    return this.eval(body, env);
   }
 
   private evalBlock(block, env: Environment) {
