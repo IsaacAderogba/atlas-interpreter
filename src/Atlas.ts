@@ -1,21 +1,16 @@
-import { Environment } from "./Environment";
+import { Environment, GlobalEnvironment } from "./Environment";
 import parser from "./parser/parser";
+import { Transformer } from "./transform/Transformer";
 
 export class Atlas {
   constructor(
-    private global = new Environment({
-      null: null,
-
-      true: true,
-      false: false,
-
-      VERSION: "0.1",
-    })
+    private global = GlobalEnvironment,
+    private transformer = new Transformer()
   ) {}
 
   run(code: string) {
     const exp = parser.parse(`(begin ${code})`);
-    return this.eval(exp)
+    return this.eval(exp);
   }
 
   // evalGlobal(exp, env = this.global) {
@@ -29,34 +24,6 @@ export class Atlas {
 
     if (this.isString(exp)) {
       return exp.slice(1, -1);
-    }
-
-    if (exp[0] === "+") {
-      return this.eval(exp[1], env) + this.eval(exp[2], env);
-    }
-
-    if (exp[0] === "*") {
-      return this.eval(exp[1], env) * this.eval(exp[2], env);
-    }
-
-    if (exp[0] === "/") {
-      return this.eval(exp[1], env) / this.eval(exp[2], env);
-    }
-
-    if (exp[0] === ">=") {
-      return this.eval(exp[1], env) >= this.eval(exp[2], env);
-    }
-
-    if (exp[0] === "<") {
-      return this.eval(exp[1], env) < this.eval(exp[2], env);
-    }
-
-    if (exp[0] === "<=") {
-      return this.eval(exp[1], env) <= this.eval(exp[2], env);
-    }
-
-    if (exp[0] === "=") {
-      return this.eval(exp[1], env) === this.eval(exp[2], env);
     }
 
     if (exp[0] === "begin") {
@@ -96,7 +63,53 @@ export class Atlas {
       return result;
     }
 
+    if (exp[0] === "def") {
+      const varExp = this.transformer.transformDefToLambda(exp);
+      return this.eval(varExp, env);
+    }
+
+    if (exp[0] === "switch") {
+      const ifExp = this.transformer.transformSwitchToIf(exp);
+      return this.eval(ifExp, env);
+    }
+
+    if (exp[0] === "lambda") {
+      const [_tag, params, body] = exp;
+
+      return {
+        params,
+        body,
+        env,
+      };
+    }
+
+    if (Array.isArray(exp)) {
+      const fn = this.eval(exp[0], env);
+
+      const args = exp.slice(1).map((arg) => this.eval(arg, env));
+
+      if (typeof fn === "function") {
+        return fn(...args);
+      }
+
+      const activationRecord = {};
+      fn.params.forEach((param, index) => {
+        activationRecord[param] = args[index];
+      });
+
+      const activationEnv = new Environment(activationRecord, fn.env);
+
+      return this.evalBody(fn.body, activationEnv);
+    }
+
     throw `Unimplemented ${JSON.stringify(exp)}`;
+  }
+
+  private evalBody(body, env: Environment) {
+    if (body[0] === "begin") {
+      return this.evalBlock(body, env);
+    }
+    return this.eval(body, env);
   }
 
   private evalBlock(block, env: Environment) {
@@ -121,7 +134,8 @@ export class Atlas {
 
   private isVariableName(exp) {
     return (
-      typeof exp === "string" && /^[+\-*/<>=-zA-Z][a-zA-Z0-9_]*$/.test(exp)
+      (typeof exp === "string" && /^[+\-*/<>=-zA-Z][a-zA-Z0-9_]*$/.test(exp)) ||
+      ["<=", ">="].includes(exp)
     );
   }
 }
