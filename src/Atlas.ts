@@ -1,8 +1,12 @@
 import { Environment, GlobalEnvironment } from "./Environment";
 import parser from "./parser/parser";
+import { Transformer } from "./transform/Transformer";
 
 export class Atlas {
-  constructor(private global = GlobalEnvironment) {}
+  constructor(
+    private global = GlobalEnvironment,
+    private transformer = new Transformer()
+  ) {}
 
   run(code: string) {
     const exp = parser.parse(`(begin ${code})`);
@@ -60,15 +64,23 @@ export class Atlas {
     }
 
     if (exp[0] === "def") {
-      const [_tag, name, params, body] = exp;
+      const varExp = this.transformer.transformDefToLambda(exp);
+      return this.eval(varExp, env);
+    }
 
-      const fn = {
+    if (exp[0] === "switch") {
+      const ifExp = this.transformer.transformSwitchToIf(exp);
+      return this.eval(ifExp, env);
+    }
+
+    if (exp[0] === "lambda") {
+      const [_tag, params, body] = exp;
+
+      return {
         params,
         body,
-        env
-      }
-
-      return env.define(name, fn);
+        env,
+      };
     }
 
     if (Array.isArray(exp)) {
@@ -83,11 +95,11 @@ export class Atlas {
       const activationRecord = {};
       fn.params.forEach((param, index) => {
         activationRecord[param] = args[index];
-      })
+      });
 
       const activationEnv = new Environment(activationRecord, fn.env);
 
-      return this.evalBody(fn.body, activationEnv)
+      return this.evalBody(fn.body, activationEnv);
     }
 
     throw `Unimplemented ${JSON.stringify(exp)}`;
@@ -95,7 +107,7 @@ export class Atlas {
 
   private evalBody(body, env: Environment) {
     if (body[0] === "begin") {
-      return this.evalBlock(body, env)
+      return this.evalBlock(body, env);
     }
     return this.eval(body, env);
   }

@@ -1,5 +1,5 @@
-describe("If tests", () => {
-  it("should built-in tests", () => {
+describe("Built-in tests", () => {
+  it("should evaluate built-in functions", () => {
     // Math functions:
 
     expect(atlas.run(`(+ 1 5)`)).toEqual(6);
