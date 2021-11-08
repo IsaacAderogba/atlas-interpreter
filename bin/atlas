@@ -17,12 +17,10 @@ function main(argv) {
   const atlas = new Atlas();
 
   console.log("mode", mode)
-  // Direct expression
   if (mode === "-e") {
     return evalGlobal(exp, atlas);
   }
 
-  // Eva file
   if (mode === "-f") {
     const src = fs.readFileSync(exp, "utf-8");
     return evalGlobal(src, atlas);
