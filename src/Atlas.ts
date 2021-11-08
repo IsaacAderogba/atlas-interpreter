@@ -1,21 +1,12 @@
-import { Environment } from "./Environment";
+import { Environment, GlobalEnvironment } from "./Environment";
 import parser from "./parser/parser";
 
 export class Atlas {
-  constructor(
-    private global = new Environment({
-      null: null,
-
-      true: true,
-      false: false,
-
-      VERSION: "0.1",
-    })
-  ) {}
+  constructor(private global = GlobalEnvironment) {}
 
   run(code: string) {
     const exp = parser.parse(`(begin ${code})`);
-    return this.eval(exp)
+    return this.eval(exp);
   }
 
   // evalGlobal(exp, env = this.global) {
@@ -29,34 +20,6 @@ export class Atlas {
 
     if (this.isString(exp)) {
       return exp.slice(1, -1);
-    }
-
-    if (exp[0] === "+") {
-      return this.eval(exp[1], env) + this.eval(exp[2], env);
-    }
-
-    if (exp[0] === "*") {
-      return this.eval(exp[1], env) * this.eval(exp[2], env);
-    }
-
-    if (exp[0] === "/") {
-      return this.eval(exp[1], env) / this.eval(exp[2], env);
-    }
-
-    if (exp[0] === ">=") {
-      return this.eval(exp[1], env) >= this.eval(exp[2], env);
-    }
-
-    if (exp[0] === "<") {
-      return this.eval(exp[1], env) < this.eval(exp[2], env);
-    }
-
-    if (exp[0] === "<=") {
-      return this.eval(exp[1], env) <= this.eval(exp[2], env);
-    }
-
-    if (exp[0] === "=") {
-      return this.eval(exp[1], env) === this.eval(exp[2], env);
     }
 
     if (exp[0] === "begin") {
@@ -96,6 +59,16 @@ export class Atlas {
       return result;
     }
 
+    if (Array.isArray(exp)) {
+      const fn = this.eval(exp[0], env);
+
+      const args = exp.slice(1).map((arg) => this.eval(arg, env));
+
+      if (typeof fn === "function") {
+        return fn(...args);
+      }
+    }
+
     throw `Unimplemented ${JSON.stringify(exp)}`;
   }
 
@@ -121,7 +94,8 @@ export class Atlas {
 
   private isVariableName(exp) {
     return (
-      typeof exp === "string" && /^[+\-*/<>=-zA-Z][a-zA-Z0-9_]*$/.test(exp)
+      (typeof exp === "string" && /^[+\-*/<>=-zA-Z][a-zA-Z0-9_]*$/.test(exp)) ||
+      ["<=", ">="].includes(exp)
     );
   }
 }
