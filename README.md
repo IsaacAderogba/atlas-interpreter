@@ -18,6 +18,7 @@ Clone this project
 
 <br />
 From the project directory, give the `atlas` binary execution rights:
+
 ```sh
 > chmod +x bin/atlas
 ```
