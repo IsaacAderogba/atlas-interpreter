@@ -33,9 +33,19 @@ export class Atlas {
       return this.eval(exp[1], env) / this.eval(exp[2], env);
     }
 
+    if (exp[0] === "begin") {
+      const blockEnv = new Environment({}, env);
+      return this.evalBlock(exp, blockEnv);
+    }
+
     if (exp[0] === "var") {
       const [_, name, value] = exp;
-      return env.define(name, this.eval(value));
+      return env.define(name, this.eval(value, env));
+    }
+
+    if (exp[0] === "set") {
+      const [_, name, value] = exp;
+      return env.assign(name, this.eval(value, env));
     }
 
     if (this.isVariableName(exp)) {
@@ -43,6 +53,18 @@ export class Atlas {
     }
 
     throw `Unimplemented ${JSON.stringify(exp)}`;
+  }
+
+  private evalBlock(block, env: Environment) {
+    let result;
+
+    const [_tag, ...expressions] = block;
+
+    expressions.forEach(exp => {
+      result = this.eval(exp, env);
+    });
+
+    return result;
   }
 
   private isNumber(exp) {
